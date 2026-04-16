@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { fetchEvents } from '../services/eventService';
 import { fetchSpeakers } from '../services/speakerService';
-import { fetchParticipants, getParticipantsDataInfo, forceParticipantsUpdate, checkParticipantsEndpoint, clearParticipantsCache } from '../services/userService';
-import { RefreshCw, Wifi, WifiOff, Database, AlertTriangle, Key } from 'lucide-react';
+import { getParticipantsDataInfo, forceParticipantsUpdate, checkParticipantsEndpoint, clearParticipantsCache } from '../services/userService';
+import { RefreshCw, Wifi, WifiOff, Database } from 'lucide-react';
 import DataStatusIndicator from '../components/DataStatusIndicator';
 import { loadConfigFromAPI } from '../services/configService';
 
@@ -14,7 +14,6 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshingData, setRefreshingData] = useState(false);
-  const [participants, setParticipants] = useState<{email: string, name: string}[]>([]);
   const [dataSource, setDataSource] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,64 +29,25 @@ const Login: React.FC = () => {
     console.log(`DEBUG: ${message}`);
   };
 
-  // Load participants on component mount for the dropdown
+  // Estado de datos de participantes (solo indicador / refresco)
   useEffect(() => {
-    const loadParticipants = async () => {
+    const loadDataStatus = async () => {
       try {
         setInitialLoading(true);
-        addDebugLog('Loading participants data from CSV file...');
-        
-        // Clear participants cache to ensure fresh data
-        await clearParticipantsCache();
-        addDebugLog('Participants cache cleared');
-        
-        // Check CSV file status
-        const endpointCheck = await checkParticipantsEndpoint();
-        addDebugLog(`CSV file check result: ${endpointCheck.status}`);
-        
-        if (endpointCheck.error) {
-          addDebugLog(`CSV file error: ${endpointCheck.message}`);
-          // Continue with other sources even if CSV fails
-        }
-        
-        // Fetch participants data from CSV
-        const data = await fetchParticipants();
-        
-        if (data.length === 0) {
-          setError('No participants data available. Please try again later.');
-          addDebugLog('No participants data available from CSV');
-          setInitialLoading(false);
-          return;
-        }
-        
-        addDebugLog(`Loaded ${data.length} participants from CSV`);
-        
-        // Log each participant for debugging
-        data.forEach((p, i) => {
-          addDebugLog(`Participant ${i+1}: ${p.firstName} ${p.lastName} (${p.email}) - Password: ${p.password}`);
-        });
-        
-        setParticipants(data.map(p => ({
-          email: p.email,
-          name: `${p.firstName} ${p.lastName}`
-        })));
-        
-        // Then get data info to update UI
+        addDebugLog('Cargando estado de datos de participantes...');
         const dataInfo = await getParticipantsDataInfo();
         setLastUpdated(dataInfo.lastUpdated);
         setDataSource(dataInfo.source);
-        
         addDebugLog(`Data source: ${dataInfo.source}, Last updated: ${dataInfo.lastUpdated}`);
       } catch (err) {
-        console.error('Login page: Error loading participants:', err);
-        addDebugLog(`Error loading participants: ${err instanceof Error ? err.message : 'Unknown error'}`);
-        setError('Error loading participants data. Please try again later.');
+        console.error('Login page: Error loading data status:', err);
+        addDebugLog(`Error loading data status: ${err instanceof Error ? err.message : 'Unknown error'}`);
       } finally {
         setInitialLoading(false);
       }
     };
-    
-    loadParticipants();
+
+    loadDataStatus();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -146,13 +106,6 @@ const Login: React.FC = () => {
     }
   };
 
-  // Handle selecting a user from the dropdown
-  const handleUserSelect = (selectedEmail: string) => {
-    setEmail(selectedEmail);
-    setPassword('12345'); // Default password for demo
-    addDebugLog(`Quick login selected: ${selectedEmail} with password: 12345`);
-  };
-  
   const handleRefresh = async () => {
     if (refreshing) return; // Avoid multiple clicks
     
@@ -187,23 +140,13 @@ const Login: React.FC = () => {
       // Force update participants
       const result = await forceParticipantsUpdate();
       if (result.success && result.participants) {
-        setParticipants(result.participants.map(p => ({
-          email: p.email,
-          name: `${p.firstName} ${p.lastName}`
-        })));
         setDataSource(result.source || null);
         setError(`Datos actualizados correctamente. Total: ${result.participants.length} participantes.`);
-        
-        // Update last updated info
+
         const updatedInfo = await getParticipantsDataInfo();
         setLastUpdated(updatedInfo.lastUpdated);
-        
+
         addDebugLog(`Participants updated successfully from ${result.source}`);
-        
-        // Log each participant for debugging
-        result.participants.forEach((p, i) => {
-          addDebugLog(`Updated participant ${i+1}: ${p.firstName} ${p.lastName} (${p.email}) - Password: ${p.password}`);
-        });
       } else {
         setError(result.message || 'Error al actualizar los datos');
         setDataSource(result.source || null);
@@ -240,7 +183,7 @@ const Login: React.FC = () => {
               className="h-16"
             />
           </div>
-          <h1 className="text-3xl font-bold">NeXthumans TANDIL 2025</h1>
+          <h1 className="text-3xl font-bold">NeXthumans VICTORIA 2026</h1>
           <p className="text-white/80 mt-2">Inicia sesión para acceder al evento</p>
         </div>
 
@@ -348,29 +291,7 @@ const Login: React.FC = () => {
             </button>
           </div>
         </form>
-        
-        {/* Quick Login Section */}
-        {participants.length > 0 && (
-          <div className="mt-6 bg-white/10 backdrop-blur-sm rounded-xl p-4">
-            <h3 className="text-sm font-medium mb-2 flex items-center">
-              <Key size={14} className="mr-1" />
-              Acceso rápido (solo para pruebas)
-            </h3>
-            <div className="space-y-2 max-h-32 overflow-y-auto">
-              {participants.map((participant, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleUserSelect(participant.email)}
-                  className="w-full text-left px-3 py-2 bg-white/10 hover:bg-white/20 rounded text-sm flex justify-between items-center"
-                >
-                  <span className="truncate">{participant.name}</span>
-                  <span className="text-xs opacity-70 truncate">{participant.email}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        
+
         {/* Debug Info */}
         {showDebugInfo && (
           <div className="mt-6 bg-black/30 backdrop-blur-sm rounded-xl p-4 text-xs">
